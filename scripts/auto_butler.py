@@ -115,7 +115,7 @@ dataset_type_lookup = {
 
 collection_name_lookup = {
     "bgmod": euclid_constants.EUCLID_BGMOD_COLLECTION_NAME,
-    "catalog-psf": euclid_constants.EUCLID_CATALOGPSF_DATASET_TYPE_NAME,
+    "catalog-psf": euclid_constants.EUCLID_CATALOGPSF_COLLECTION_NAME,
     "coadd": euclid_constants.EUCLID_COADD_COLLECTION_NAME,
     "flag": euclid_constants.EUCLID_FLAGMAP_COLLECTION_NAME,
     "grid-psf": euclid_constants.EUCLID_GRIDPSF_COLLECTION_NAME,
@@ -274,7 +274,7 @@ def extract_patch_data_from_fits_file(
             physical_filter = header["FILTER"]
             band = PHYSICAL_FILTER_TO_BAND[physical_filter]
         else:
-            band = regex_band or None
+            band = PHYSICAL_FILTER_TO_BAND[regex_band.replace('-','_')] or None
 
     center_coord = im_wcs.pixel_to_world(*center_pix)
     center_point = SpherePoint(
@@ -371,23 +371,36 @@ def ingest_dataset(
         tract_group.sort("patch")  # So that patch 0 is written first.
 
         if converter is not None:
-            row0, remaining_rows = tract_group[0], tract_group[1:]
 
-            dataset_ref = _make_dataset_ref(
-                row0, dataset, dataset_type_obj, collection_name, butler
-            )
-            # Physically write the first patch to disk in `NumpyArray`.
-            physical_uri = _write_physical_dataset(
-                row0["filepath"], dataset_ref, butler, converter
-            )
-            # Symlink the rest.
-            # for row in tqdm.tqdm(
-            #     remaining_rows, position=2, desc="patches", leave=False
-            # ):
-            #     dataset_ref = _make_dataset_ref(
-            #         row, dataset, dataset_type_obj, collection_name, butler
-            #     )
-            #     _symlink_dataset(physical_uri, dataset_ref, butler)
+            for row in tqdm.tqdm(
+                tract_group, position=2, desc="tract files", leave=False
+            ):
+                print(row)
+                dataset_ref = _make_dataset_ref(
+                row, dataset, dataset_type_obj, collection_name, butler
+                )
+                # Physically write the first patch to disk in `NumpyArray`.
+                physical_uri = _write_physical_dataset(
+                row["filepath"], dataset_ref, butler, converter
+               )
+
+#            row0, remaining_rows = tract_group[0], tract_group[1:]
+#
+#            dataset_ref = _make_dataset_ref(
+#                row0, dataset, dataset_type_obj, collection_name, butler
+#            )
+#            # Physically write the first patch to disk in `NumpyArray`.
+#            physical_uri = _write_physical_dataset(
+#                row0["filepath"], dataset_ref, butler, converter
+#            )
+            
+#            for row in tqdm.tqdm(
+#                remaining_rows, position=2, desc="patches", leave=False
+#            ):
+#                dataset_ref = _make_dataset_ref(
+#                    row, dataset, dataset_type_obj, collection_name, butler
+#                )
+#                _symlink_dataset(physical_uri, dataset_ref, butler)
 
         else:
             for row in tqdm.tqdm(
@@ -400,6 +413,7 @@ def ingest_dataset(
 
 
 def _standardize_data_coord(row, dataset: str, butler: Butler):
+    print(dataset)
     data_coord = dict(skymap=row["skymap"], tract=row["tract"], patch=row["patch"])
     if dataset != "segmap":
         data_coord["band"] = row["band"]

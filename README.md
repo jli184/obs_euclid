@@ -38,6 +38,14 @@ You can then install the new `obs_euclid` on top:
 The FITS file data are organised as they are downloaded from the IRSA servers
 https://irsa.ipac.caltech.edu/ibe/data/euclid/q1/
 
+You can download from AWS:
+```
+aws s3 sync s3://nasa-irsa-euclid-q1/q1/MER/ ./MER/ \
+    --no-sign-request --exclude "*" --include "*/NISP/*" --include "*/VIS/*"
+aws s3 cp s3://nasa-irsa-euclid-q1/q1/MER_SEG/ ./MER_SEG/ --recursive --no-sign-request
+
+```
+
 ie.
 ```
 /path/to/data/euclid/data/
@@ -160,6 +168,10 @@ Load the datasets with eg.:
 -  `python3 obs_euclid/scripts/auto_butler.py --dataset rms`
 -  `python3 obs_euclid/scripts/auto_butler.py --dataset bgmod`
 -  `python3 obs_euclid/scripts/auto_butler.py --dataset flag`
+-  `python3 obs_euclid/scripts/auto_butler.py --dataset segmap`
+-  `python3 obs_euclid/scripts/auto_butler.py --dataset grid-psf`
+-  `python3 obs_euclid/scripts/auto_butler.py --dataset catalog-psf`
+
 
 The Chained collection is called `Euclid/Q1`.
 
@@ -180,7 +192,7 @@ You can make basic queries with Butler.query_datasets().
 ...    "euclidCoadd", where="band.name='J'", limit=10, collections="Euclid/Q1"
 ... )
 >>> print(coadd_refs[0])
->>> print(coadd_refs[0].ospath)
+>>> print(b.getURI(coadd_refs[0]).ospath)
 >>> im_data = b.get(coadd_refs[0])
 >>> print(im_data.wcs) # wcs to make transforms
 >>> print(im_data.image.array) # pixel data
@@ -192,7 +204,7 @@ Because the skymap is made of tracts, you can do spatial queries:
 >>> ra = 60.3132
 >>> dec = -51.0
 >>> spatial_q = f"band.name='J' AND tract.region OVERLAPS POINT({ra}, {dec})"
->>> spatial_refs = b.query_dataset(
+>>> spatial_refs = b.query_datasets(
 ...     "euclidCoadd", where=spatial_q, collections="Euclid/Q1"
 ... )
 >>> print(len(spatial_refs)) # Should be one, at the centre of a tile
