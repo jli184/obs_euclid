@@ -9,7 +9,7 @@ You will need an installed copy of the lsst-stack.
 
 In your working dir `wkdir`, clone this repo:
 
-`git clone https://github.com/aidansedgewick/obs_euclid.git`
+`git clone https://github.com/jli184/obs_euclid.git`
 
 ### LSST DM Stack
 You need an installed copy of the `lsst-scipipe` stack.
@@ -43,7 +43,6 @@ You can download from AWS:
 aws s3 sync s3://nasa-irsa-euclid-q1/q1/MER/ ./MER/ \
     --no-sign-request --exclude "*" --include "*/NISP/*" --include "*/VIS/*"
 aws s3 cp s3://nasa-irsa-euclid-q1/q1/MER_SEG/ ./MER_SEG/ --recursive --no-sign-request
-
 ```
 
 ie.
@@ -107,11 +106,6 @@ So actually we set the patch size in pixels to (21600, 21600).
 The Butler is flexible enough that when it loads the data from FITS file,
 it will read the all of the data.
 
-(If we set the patchsize = (19200, 19200) pixels, I think it would force
-the oversized tiles to be actually four patches one "normal size" [0:19200,0:19200]
-two long and thin [0:19199,19200:x_size] and [19200:y_size,0:19199] and one very small
-[19200:y_size,19200:x_size]. Or the three "extra" patches would simply be sliced off.)
-
 #### Dateset types
 
 The dataset types are defined/registered after skymap.
@@ -142,19 +136,17 @@ They also seem to load and read fine.
 
 ##
 
-I have some issues with the `euclidCatalogPsf` catalog-psf datasets.
-They must be physically written to disk in a format that the Butler can then re-read.
-I think that I am reading the WCS from the FITS headers incorrectly, because several catalog-psf files are mapped to the same tract.
+The catalog-psf files are ingested into two datasets, `euclidCatalogPsfImage` and `euclidCatalogPsfTable`.
+`euclidCatalogPsfImage` can be ingested with `symlink`, and `euclidCatalogPsfTable` is ingested with PUT as AstropyTables.
 
 ##
 
-The segmentation maps (`euclidSegMap`) are also a bit problematic. 
-Because these files are int64 FITS, I think there is no native Butler storage class that can them.
+The segmentation maps (`euclidSegMap`) are int64 FITS, so there is no native Butler storage class that can hold them.
 
-The smart solution by from Jennifer Li at UIUC is to read these in and write them to the `NumpyArray` storage class.
+We read these in and write them to the `NumpyArray` storage class.
 However this means that they need to be physically written to disk.
 This took around 30mins using the hardware at DK-IDAC.
-It also means that there is unfornately no WCS information stored with them. 
+It also means that there is unfortunately no WCS information stored with them. 
 
 But as the WCS for all image products is the same for a single tile, when you find the
 bounding box for a product with WCS available (eg. coadds), the same bbox should apply to
@@ -170,17 +162,10 @@ Load the datasets with eg.:
 -  `python3 obs_euclid/scripts/auto_butler.py --dataset flag`
 -  `python3 obs_euclid/scripts/auto_butler.py --dataset segmap`
 -  `python3 obs_euclid/scripts/auto_butler.py --dataset grid-psf`
--  `python3 obs_euclid/scripts/auto_butler.py --dataset catalog-psf`
-
+-  `python3 obs_euclid/scripts/auto_butler.py --dataset catalog-psf-table`
+-  `python3 obs_euclid/scripts/auto_butler.py --dataset catalog-psf-image`
 
 The Chained collection is called `Euclid/Q1`.
-
-You can see/change all of these names in 
-
-Some of the products ingest very well.
-
-eg. coadd, rms, bgmod, flag.
-
 
 ## Querying the butler
 
@@ -213,14 +198,4 @@ Because the skymap is made of tracts, you can do spatial queries:
 
 ## Issues
 
-- non-standard tile sizes means that tract WCS does not exactly match with loaded image WCS.
-  - Currently all tracts are defined as 21600x21600 pixels, but the centre of each tract is 
-    still the centre of the FITS image (usually 19200//2, not 21600//2).
-  - currently you have to take cutouts from the full loaded image, 
-    rather than requesting a windowed read (that is, you can't currently provide 'bbox to `Butler.get()`).
-
-  - The solution is maybe to define the RA, Dec centres of tracts as 21600//2 instead of 19200//2
-    in `lsst.obs.euclid.skymaps`
-
-- catalog-psf tables are not ingested correctly.
 - Ingesting images segmaps without physically writing to disk - would give faster ingest.
