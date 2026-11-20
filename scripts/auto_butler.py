@@ -48,14 +48,15 @@ logger = logging.getLogger("auto_butler")
 
 ###===== Some definitions about the structure of the euclid files =====###
 
-ALLOWED_DATASETS = ("catalog-psf", "coadd", "grid-psf", "bgmod", "rms", "flag", "segmap")
-ALLOWED_CAMERA_SUBDIRS = ("DECAM", "NISP", "VIS")
+ALLOWED_DATASETS = ("catalog-psf-table", "catalog-psf-image", "coadd", "grid-psf", "bgmod", "rms", "flag", "segmap")
+ALLOWED_CAMERA_SUBDIRS = ("NISP", "VIS")
 
 MANIFEST_TABLES_PATH = Path(__file__).parent.parent / "ingest_manifests" 
 # should get <top-level obs_euclid>/ingest_manifests
 
 DATASET_PARENT_PATH_LOOKUP = {
-    "catalog-psf": "MER",
+    "catalog-psf-table": "MER",
+    "catalog-psf-image": "MER",
     "coadd": "MER",
     "grid-psf": "MER",
     "bgmod": "MER",
@@ -69,7 +70,8 @@ DATASET_PARENT_PATH_LOOKUP = {
 # or  EUC_MER_CATALOG-PSF-VIS_TILE102020531...
 # or  EUC_MER_CATALOG-PSF-DES-G_TILE102020531...
 GLOB_PATTERN_LOOKUP = {
-    "catalog-psf": "EUC_MER_CATALOG-PSF-*.fits",  # one *: for both bpass AND tile_id
+    "catalog-psf-table": "EUC_MER_CATALOG-PSF-*.fits",  # same for catalog-psf-image and catalog-psf-table
+    "catalog-psf-image": "EUC_MER_CATALOG-PSF-*.fits",
     "coadd": "EUC_MER_BGSUB-MOSAIC-*.fits",
     "grid-psf": "EUC_MER_GRID-PSF-*.fits",
     "bgmod": "EUC_MER_BGMOD-*.fits",
@@ -83,29 +85,32 @@ GLOB_PATTERN_LOOKUP = {
 # grid-psf: '\-': capture literal '-' in eg. NIR-Y
 BANDPASS_REGEX_LOOKUP = {
     "grid-psf": r"EUC_MER_GRID-PSF-([A-Z\-]*)_TILE.*",
-    "catalog-psf": r"EUC_MER_CATALOG-PSF-([A-Z\-]*)_TILE.*"
+    "catalog-psf-table": r"EUC_MER_CATALOG-PSF-([A-Z\-]*)_TILE.*",
+    "catalog-psf-image": r"EUC_MER_CATALOG-PSF-([A-Z\-]*)_TILE.*"
 }
 
 # The relevant header is different for some datasets
 HDU_LOOKUP = {
-    **{dataset: 0 for dataset in ["coadd", "bgmod", "rms", "flag", "segmap"]},
-    **{dataset: 1 for dataset in ["grid-psf", "catalog-psf"]},
+    **{dataset: 0 for dataset in ["coadd", "bgmod", "rms", "flag", "segmap", ]},
+    **{dataset: 1 for dataset in ["grid-psf", "catalog-psf-image"]},
+    **{dataset: 2 for dataset in ["catalog-psf-table"]},
 }
 
-HAS_CAMERA_SUBDIRS = ("catalog-psf", "coadd", "grid-psf", "bgmod", "rms", "flag")
+HAS_CAMERA_SUBDIRS = ("catalog-psf-table", "catalog-psf-image", "coadd", "grid-psf", "bgmod", "rms", "flag")
 # "segmap" does NOT have subdirs.
 
 PHYSICAL_FILTER_TO_BAND = {"VIS": "VIS", "NIR_Y": "Y", "NIR_J": "J", "NIR_H": "H"}
 
 PUT_CONVERTER_LOOKUP = {
     "segmap": converters.segmap_converter,
-    "catalog-psf": converters.catalog_psf_converter,
+    "catalog-psf-table": converters.catalog_psf_converter,
 }
 
 
 dataset_type_lookup = {
     "bgmod": euclid_constants.EUCLID_BGMOD_DATASET_TYPE_NAME,
-    "catalog-psf": euclid_constants.EUCLID_CATALOGPSF_DATASET_TYPE_NAME,
+    "catalog-psf-image": euclid_constants.EUCLID_CATALOGPSFIMAGE_DATASET_TYPE_NAME,
+    "catalog-psf-table": euclid_constants.EUCLID_CATALOGPSFTABLE_DATASET_TYPE_NAME,
     "coadd": euclid_constants.EUCLID_COADD_DATASET_TYPE_NAME,
     "flag": euclid_constants.EUCLID_FLAGMAP_DATASET_TYPE_NAME,
     "grid-psf": euclid_constants.EUCLID_GRIDPSF_DATASET_TYPE_NAME,
@@ -115,7 +120,8 @@ dataset_type_lookup = {
 
 collection_name_lookup = {
     "bgmod": euclid_constants.EUCLID_BGMOD_COLLECTION_NAME,
-    "catalog-psf": euclid_constants.EUCLID_CATALOGPSF_COLLECTION_NAME,
+    "catalog-psf-image": euclid_constants.EUCLID_CATALOGPSFIMAGE_COLLECTION_NAME,
+    "catalog-psf-table": euclid_constants.EUCLID_CATALOGPSFTABLE_COLLECTION_NAME,
     "coadd": euclid_constants.EUCLID_COADD_COLLECTION_NAME,
     "flag": euclid_constants.EUCLID_FLAGMAP_COLLECTION_NAME,
     "grid-psf": euclid_constants.EUCLID_GRIDPSF_COLLECTION_NAME,
@@ -265,21 +271,30 @@ def extract_patch_data_from_fits_file(
 
     with fits.open(filepath) as f:
         header = f[hdu].header
-        im_wcs = WCS(header)
-        im_shape = [header.get("NAXIS1"), header.get("NAXIS2")]
-        center_pix = (header.get("NAXIS1") // 2, header.get("NAXIS2") // 2)
+        #im_wcs = WCS(header)
+        #im_shape = [header.get("NAXIS1"), header.get("NAXIS2")]
+        #center_pix = (header.get("NAXIS1") // 2, header.get("NAXIS2") // 2)
+        if "CATALOG-PSF" in filepath.name: 
+            ## catalog-psf has the WCS in HDU 1; for both catalog-psf-image and catalog-psf-table.
+            ## center point of catalog-psf HDU is center of the image, but not the center of the catalog-psf image.
+            center_point = SpherePoint(f[1].header['CRVAL1']*degrees, f[1].header['CRVAL2']*degrees)
+        else:
+            center_point = SpherePoint(f[hdu].header['CRVAL1']*degrees, f[hdu].header['CRVAL2']*degrees)
 
         band = None
         if "FILTER" in header.keys():
             physical_filter = header["FILTER"]
             band = PHYSICAL_FILTER_TO_BAND[physical_filter]
         else:
-            band = PHYSICAL_FILTER_TO_BAND[regex_band.replace('-','_')] or None
+            if regex_band is not None:
+                band = PHYSICAL_FILTER_TO_BAND[regex_band.replace('-','_')]
+            else:
+                band = None
 
-    center_coord = im_wcs.pixel_to_world(*center_pix)
-    center_point = SpherePoint(
-        center_coord.ra.deg * degrees, center_coord.dec.deg * degrees
-    )
+    #center_coord = im_wcs.pixel_to_world(*center_pix)
+    #center_point = SpherePoint(
+    #    center_coord.ra.deg * degrees, center_coord.dec.deg * degrees
+    #)
 
     tract: TractInfo = skymap.findTract(center_point)
     # patch: PatchInfo = tract.findPatch(center_point)
@@ -340,7 +355,7 @@ def ingest_dataset(
     bandpass_regex = BANDPASS_REGEX_LOOKUP.get(dataset, None)
 
     converter = PUT_CONVERTER_LOOKUP.get(dataset, None)  
-    if converter is not None:
+    if dataset == "segmap" or dataset == "catalog-psf-table":
         logger.info(f"use {converter.__name__} to convert for butler PUT")
     else:
         logger.info("use symlink with Butler INGEST")
@@ -375,7 +390,6 @@ def ingest_dataset(
             for row in tqdm.tqdm(
                 tract_group, position=2, desc="tract files", leave=False
             ):
-                print(row)
                 dataset_ref = _make_dataset_ref(
                 row, dataset, dataset_type_obj, collection_name, butler
                 )

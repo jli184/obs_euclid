@@ -17,13 +17,21 @@ def register_dataset_types(butler: Butler) -> None:
     )
     butler.registry.registerDatasetType(bgmod_dataset_type)
 
-    catalog_psf_dataset_type = DatasetType(
-        euclid_constants.EUCLID_CATALOGPSF_DATASET_TYPE_NAME,
+    catalog_psf_image_dataset_type = DatasetType(
+        euclid_constants.EUCLID_CATALOGPSFIMAGE_DATASET_TYPE_NAME,
+        dimensions=STANDARD_DIMENSIONS,
+        storageClass="ExposureF",
+        universe=universe,
+    )
+    butler.registry.registerDatasetType(catalog_psf_image_dataset_type)
+
+    catalog_psf_table_dataset_type = DatasetType(
+        euclid_constants.EUCLID_CATALOGPSFTABLE_DATASET_TYPE_NAME,
         dimensions=STANDARD_DIMENSIONS,
         storageClass="AstropyTable",
         universe=universe,
     )
-    butler.registry.registerDatasetType(catalog_psf_dataset_type)
+    butler.registry.registerDatasetType(catalog_psf_table_dataset_type)
 
     # Define and register COADDS
     coadd_dataset_type = DatasetType(
